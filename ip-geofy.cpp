@@ -103,7 +103,7 @@ int main()
 
 	if (inum < 1 || inum > i)
 	{
-		printf("\nInterface number out of range.\n");
+		printf("\n接口编号超出范围。\n");
 		/* Free the device list */
 		pcap_freealldevs(alldevs);
 		return -1;
@@ -122,7 +122,7 @@ int main()
 		errbuf		// error buffer
 	)) == NULL)
 	{
-		fprintf(stderr, "\nUnable to open the adapter. %s is not supported by Npcap\n", d->name);
+		fprintf(stderr, "\n无法打开适配器。%s 不被 Npcap 支持\n", d->name);
 		/* Free the device list */
 		pcap_freealldevs(alldevs);
 		return -1;
@@ -149,7 +149,7 @@ int main()
 	//compile the filter
 	if (pcap_compile(adhandle, &fcode, packet_filter, 1, netmask) < 0)
 	{
-		fprintf(stderr, "\n无法编译 packet filter. Check the syntax.\n");
+		fprintf(stderr, "\n无法编译数据包过滤器，请检查语法。\n");
 		/* Free the device list */
 		pcap_freealldevs(alldevs);
 		return -1;
@@ -200,8 +200,7 @@ void packet_handler(u_char* param, const struct pcap_pkthdr* header, const u_cha
 	printf("%s.%.6d len:%d ", timestr, header->ts.tv_usec, header->len);
 
 	/* retireve the position of the ip header */
-	ih = (ip_header*)(pkt_data +
-		14); //length of ethernet header
+	ih = (ip_header*)(pkt_data + 14); //length of ethernet header
 
 	/* retireve the position of the udp header */
 	ip_len = (ih->ver_ihl & 0xf) * 4;

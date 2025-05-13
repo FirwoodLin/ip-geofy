@@ -23,5 +23,8 @@
     <ClInclude Include="ether_type.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="protocol_headers.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

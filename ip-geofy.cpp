@@ -2,7 +2,9 @@
 #include <pcap.h>
 #include <time.h>
 #include <Winsock2.h>
+#include <ws2tcpip.h>
 #include <tchar.h>
+#include <ether_type.h>
 BOOL LoadNpcapDlls()
 {
 	_TCHAR npcap_dir[512];
@@ -19,7 +21,11 @@ BOOL LoadNpcapDlls()
 	}
 	return TRUE;
 }
-
+typedef struct ethernet_header {
+	u_char ether_dhost[6];	/* Destination host address */
+	u_char ether_shost[6];	/* Source host address */
+	u_short ether_type;		    /* IP? ARP? RARP? etc */
+} ethernet_header;
 
 /* 4 bytes IP address */
 typedef struct ip_address {
@@ -52,6 +58,13 @@ typedef struct udp_header {
 	u_short crc;			// Checksum
 }udp_header;
 
+/* TCP header (simplified, only ports needed for this example) */
+typedef struct tcp_header {
+	u_short sport;          // Source port
+	u_short dport;          // Destination port
+	// Other TCP fields...
+} tcp_header;
+
 /* prototype of the packet handler */
 void packet_handler(u_char* param, const struct pcap_pkthdr* header, const u_char* pkt_data);
 
@@ -65,7 +78,7 @@ int main()
 	pcap_t* adhandle;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	u_int netmask;
-	char packet_filter[] = "ip and udp";
+	char packet_filter[] = "tcp or udp"; // 初始：ip and udp
 	struct bpf_program fcode;
 
 	/* Load Npcap and its functions. */
@@ -180,11 +193,16 @@ void packet_handler(u_char* param, const struct pcap_pkthdr* header, const u_cha
 {
 	struct tm ltime;
 	char timestr[16];
+	ethernet_header* eth_hdr;
 	ip_header* ih;
 	udp_header* uh;
+	tcp_header* th;
 	u_int ip_len;
-	u_short sport, dport;
+	u_int l3_offset = sizeof(ethernet_header); // Initial offset for L3 header (usually 14)
+	u_short ether_type;
+	u_short sport = 0, dport = 0;
 	time_t local_tv_sec;
+	const char* protocol_str = "Other"; // Default
 
 	/*
 	 * Unused variable
@@ -199,27 +217,156 @@ void packet_handler(u_char* param, const struct pcap_pkthdr* header, const u_cha
 	/* print timestamp and length of the packet */
 	printf("%s.%.6d len:%d ", timestr, header->ts.tv_usec, header->len);
 
+	if (header->caplen < sizeof(ethernet_header)) {
+		printf("[Packet too short for Ethernet Header]\n");
+		return;
+	}
+	eth_hdr = (ethernet_header*)pkt_data;
+	ether_type = ntohs(eth_hdr->ether_type); // Get EtherType in host byte order
+
+	if (ether_type == ETHERTYPE_VLAN) {
+		printf("[VLAN] ");
+		// Check if packet is long enough for VLAN tag + actual EtherType
+		if (header->caplen < sizeof(ethernet_header) + 4) {
+			printf("[Packet too short for VLAN Tag info]\n");
+			return;
+		}
+		// The real EtherType is 4 bytes after the nominal Ethernet header end
+		ether_type = ntohs(*(u_short*)(pkt_data + sizeof(ethernet_header) + 2));
+		l3_offset += 4; // Adjust the offset for Layer 3 header
+	}
+
 	/* retireve the position of the ip header */
-	ih = (ip_header*)(pkt_data + 14); //length of ethernet header
+	const u_int ETHERNET_HEADER_LEN = 14;
+	ih = (ip_header*)(pkt_data + ETHERNET_HEADER_LEN); //length of ethernet header
 
-	/* retireve the position of the udp header */
-	ip_len = (ih->ver_ihl & 0xf) * 4;
-	uh = (udp_header*)((u_char*)ih + ip_len);
+	// --- Check EtherType to determine Layer 3 Protocol ---
+	if (ether_type == ETHERTYPE_IP) {
+		// Check if packet is long enough for minimum IP header at the calculated offset
+		if (header->caplen < l3_offset + 20) { // Check for minimum IP header size (20 bytes)
+			printf("[Packet too short for minimum IPv4 Header at offset %u]\n", l3_offset);
+			return;
+		}
 
-	/* convert from network byte order to host byte order */
-	sport = ntohs(uh->sport);
-	dport = ntohs(uh->dport);
+		ih = (ip_header*)(pkt_data + l3_offset); // Point to the IP header
 
-	/* print ip addresses and udp ports */
-	printf("%d.%d.%d.%d.%d -> %d.%d.%d.%d.%d\n",
-		ih->saddr.byte1,
-		ih->saddr.byte2,
-		ih->saddr.byte3,
-		ih->saddr.byte4,
-		sport,
-		ih->daddr.byte1,
-		ih->daddr.byte2,
-		ih->daddr.byte3,
-		ih->daddr.byte4,
-		dport);
+		// --- Validate IP Version and Header Length ---
+		u_char ip_version = (ih->ver_ihl >> 4);
+		if (ip_version != 4) {
+			printf("[Not an IPv4 packet (Version: %u)]\n", ip_version);
+			return; // Don't process if not IPv4
+		}
+
+		ip_len = (ih->ver_ihl & 0xf) * 4; // Calculate IP header length in bytes
+		if (ip_len < 20) { // Basic sanity check (redundant with above caplen check, but good practice)
+			// This is where your original error was triggered
+			printf("[Invalid IPv4 header length: %u bytes]\n", ip_len);
+			return;
+		}
+
+		// Check if the *entire* IP header was captured
+		if (header->caplen < l3_offset + ip_len) {
+			printf("[Packet too short for full IPv4 Header (expected %u bytes at offset %u)]\n", ip_len, l3_offset);
+			// Optionally print partial info or just return
+			 // Still print base IP info if possible
+			printf("[Partial IP] %d.%d.%d.%d -> %d.%d.%d.%d ",
+				ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4,
+				ih->daddr.byte1, ih->daddr.byte2, ih->daddr.byte3, ih->daddr.byte4);
+			return; // Return after printing partial info
+		}
+
+		// --- Now process TCP or UDP based on ih->proto ---
+		u_int transport_header_offset = l3_offset + ip_len;
+
+		switch (ih->proto) {
+		case IPPROTO_TCP: {
+			protocol_str = "TCP";
+			// Check if captured data is long enough for basic TCP header (ports)
+			if (header->caplen < transport_header_offset + sizeof(tcp_header)) { // Using our simplified struct size
+				printf("[Packet too short for TCP ports]\n");
+			}
+			else {
+				th = (tcp_header*)((u_char*)ih + ip_len); // Pointer arithmetic relative to ih start
+				sport = ntohs(th->sport);
+				dport = ntohs(th->dport);
+			}
+			break;
+		}
+		case IPPROTO_UDP: {
+			protocol_str = "UDP";
+			// Check if captured data is long enough for UDP header
+			if (header->caplen < transport_header_offset + sizeof(udp_header)) {
+				printf("[Packet too short for UDP header]\n");
+			}
+			else {
+				uh = (udp_header*)((u_char*)ih + ip_len); // Pointer arithmetic relative to ih start
+				sport = ntohs(uh->sport);
+				dport = ntohs(uh->dport);
+			}
+			break;
+		}
+		case IPPROTO_ICMP: // Defined in ws2tcpip.h
+			protocol_str = "ICMP";
+			// No ports for ICMP in this context
+			break;
+		case IPPROTO_IGMP: // Defined in ws2tcpip.h
+			protocol_str = "IGMP";
+			// No ports for IGMP in this context
+			break;
+		default:
+			protocol_str = "Other L4"; // Protocol number inside IP
+			// sport and dport remain 0
+			break;
+		}
+
+	}
+	else if (ether_type == ETHERTYPE_ARP) {
+		protocol_str = "ARP";
+		// ARP parsing would go here if needed
+		// No IP or Port info in the same way
+		printf("[%s]\n", protocol_str); // Print ARP and return
+		return; // Don't proceed to IP printing
+	}
+	else if (ether_type == ETHERTYPE_IPV6) {
+		protocol_str = "IPv6";
+		// IPv6 parsing would go here if needed
+		printf("[%s]\n", protocol_str); // Print IPv6 and return
+		return; // Don't proceed to IP printing
+	}
+	else {
+		// Unknown/unhandled EtherType
+		printf("[Unknown L3: 0x%04x]\n", ether_type);
+		return; // Don't know how to parse further
+	}
+	// 如果有 IP 协议包
+	if (ih != NULL) {
+		// 协议类型 & 源 IP
+		printf("[%s] %d.%d.%d.%d",
+			protocol_str,
+			ih->saddr.byte1,
+			ih->saddr.byte2,
+			ih->saddr.byte3,
+			ih->saddr.byte4);
+
+		// 目标 IP
+		// Only print ports if they were successfully parsed
+		if (sport != 0 || dport != 0) {
+			printf(":%d -> %d.%d.%d.%d:%d\n",
+				sport,
+				ih->daddr.byte1,
+				ih->daddr.byte2,
+				ih->daddr.byte3,
+				ih->daddr.byte4,
+				dport);
+		}
+		else {
+			// Print only destination IP if no ports are relevant/available/parsed
+			printf(" -> %d.%d.%d.%d\n",
+				ih->daddr.byte1,
+				ih->daddr.byte2,
+				ih->daddr.byte3,
+				ih->daddr.byte4);
+		}
+	}
+	// 其他协议已经在之前返回了
 }

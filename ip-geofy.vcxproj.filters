@@ -18,12 +18,30 @@
     <ClCompile Include="ip-geofy.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="libmaxminddb\data-pool.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="libmaxminddb\maxminddb.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ether_type.h">
+    <ClInclude Include="include\ether_type.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="protocol_headers.h">
+    <ClInclude Include="include\protocol_headers.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="libmaxminddb\data-pool.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="libmaxminddb\maxminddb.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="libmaxminddb\maxminddb_config.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="libmaxminddb\maxminddb-compat-util.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

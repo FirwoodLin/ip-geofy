@@ -135,10 +135,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ip-geofy.cpp" />
+    <ClCompile Include="libmaxminddb\data-pool.c" />
+    <ClCompile Include="libmaxminddb\maxminddb.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ether_type.h" />
-    <ClInclude Include="protocol_headers.h" />
+    <ClInclude Include="include\ether_type.h" />
+    <ClInclude Include="include\protocol_headers.h" />
+    <ClInclude Include="libmaxminddb\data-pool.h" />
+    <ClInclude Include="libmaxminddb\maxminddb-compat-util.h" />
+    <ClInclude Include="libmaxminddb\maxminddb.h" />
+    <ClInclude Include="libmaxminddb\maxminddb_config.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -29,7 +29,7 @@ const std::string DEFAULT_FILTER = "tcp or udp";
 constexpr int MAX_TIMESTR_LEN =
 32; // Increased buffer for timestamp string with usec
 GeoIPResolver geo_resolver("GeoLite2-Country.mmdb");
-GeoIPResolver geo_city_resolver("GeoLite2-City.mmdb");
+GeoIPResolver geo_city_resolver("IP2LOCATION-LITE-DB1.MMDB");
 // --- Function Prototypes ---
 void packet_handler(unsigned char* param, const struct pcap_pkthdr* header,
 	const unsigned char* pkt_data);
@@ -59,30 +59,15 @@ void parse_location_ipv4(char ip_str_buffer[INET6_ADDRSTRLEN],
 void parse_location_ipv6(char ip_str_buffer[INET6_ADDRSTRLEN],
 	LocationInfo& loc_info);
 // process funtion
+void print_copyright();
 int main_logic(pcap_t*& adhandle, pcap_if_t*& alldevs_list);
 // --- Main Application Logic ---
 int main() {
+	print_copyright();
 	SetConsoleOutputCP(CP_UTF8);
 	pcap_if_t* alldevs_list = nullptr; // Will hold the list of all devices
 	pcap_t* adhandle = nullptr;
 	int exit_code = 0;
-
-	// test lookup v4
-	// sockaddr_in ipv4_addr;
-	// std::memset(&ipv4_addr, 0, sizeof(ipv4_addr)); // 清空结构体
-	// ipv4_addr.sin_family = AF_INET;              // IPv4
-	// inet_pton(AF_INET, "223.5.5.5", &(ipv4_addr.sin_addr)); // 设置 IP 地址
-	// auto ret =
-	// geo_city_resolver.lookup(reinterpret_cast<sockaddr*>(&ipv4_addr));
-
-	// test lookup v6
-	// sockaddr_in6 ipv6_addr;
-	// std::memset(&ipv6_addr, 0, sizeof(ipv6_addr)); // 清空结构体
-	// ipv6_addr.sin6_family = AF_INET6;             // IPv6
-	// const char* ipv6_str = "2001:da8::1";
-	// inet_pton(AF_INET6, ipv6_str, &(ipv6_addr.sin6_addr));
-	// auto ret_v6 =
-	// geo_city_resolver.lookup(reinterpret_cast<sockaddr*>(&ipv6_addr));
 
 	main_logic(adhandle, alldevs_list);
 
@@ -157,6 +142,10 @@ int main_logic(pcap_t*& adhandle, pcap_if_t*& alldevs_list) {
 
 	return 0;
 }
+
+void print_copyright() {
+	std::cout << "IP地址位置数据由 https://www.cz88.net 纯真CZ88 提供支持" << std::endl;
+};
 
 // --- Function Implementations ---
 
@@ -724,5 +713,5 @@ void print_packet_info(const std::string& timestamp_str, int len,
 		<< " " << info.dst_loc.city << " "
 		<< "]";
 	std::cout << std::endl;
-	system("PAUSE");
+	//system("PAUSE");
 }
